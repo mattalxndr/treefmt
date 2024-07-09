@@ -6,6 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/go-git/go-git/v5/plumbing/format/index"
 
 	"github.com/charmbracelet/log"
 
@@ -16,6 +19,7 @@ type gitWalker struct {
 	root          string
 	paths         chan string
 	repo          *git.Repository
+	allFiles      bool
 	relPathOffset int
 }
 
@@ -39,7 +43,17 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 	}
 
 	// cache in-memory whether a path is present in the git index
-	var cache map[string]bool
+	var cache map[string]*index.Entry
+
+	hasChanged := func(entry *index.Entry, info os.FileInfo) bool {
+		if g.allFiles {
+			// user wants all files regardless of changes
+			return true
+		}
+		// we only want to emit files that have changed when compared with the index
+		// mod time comparison is done with EPOCH (second) precision as per the POSIX spec
+		return entry.ModifiedAt.Truncate(time.Second) != info.ModTime().Truncate(time.Second)
+	}
 
 	for path := range g.paths {
 
@@ -61,6 +75,11 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 					info, err := os.Lstat(path)
 					if err != nil {
 						return fmt.Errorf("failed to stat %s: %w", path, err)
+					}
+
+					// skip processing if the file hasn't changed when compared with the index
+					if !hasChanged(entry, info) {
+						continue
 					}
 
 					// determine a relative path
@@ -85,9 +104,9 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 
 		// otherwise we ensure the git index entries are cached and then check if they are in the git index
 		if cache == nil {
-			cache = make(map[string]bool)
+			cache = make(map[string]*index.Entry)
 			for _, entry := range idx.Entries {
-				cache[entry.Name] = true
+				cache[entry.Name] = entry
 			}
 		}
 
@@ -103,7 +122,8 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 		}
 
 		return filepath.Walk(path, func(path string, info fs.FileInfo, _ error) error {
-			if info.IsDir() {
+			// ignore directories and symlinks
+			if info.IsDir() || info.Mode()&os.ModeSymlink == os.ModeSymlink {
 				return nil
 			}
 
@@ -112,8 +132,11 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 				return fmt.Errorf("failed to determine a relative path for %s: %w", path, err)
 			}
 
-			if _, ok := cache[relPath]; !ok {
+			if entry, ok := cache[relPath]; !ok {
 				log.Debugf("path %v not found in git index, skipping", path)
+				return nil
+			} else if !hasChanged(entry, info) {
+				log.Debugf("path %v has not changed, skipping", path)
 				return nil
 			}
 
@@ -130,7 +153,7 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 	return nil
 }
 
-func NewGit(root string, paths chan string) (Walker, error) {
+func NewGit(root string, allFiles bool, paths chan string) (Walker, error) {
 	repo, err := git.PlainOpen(root)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repo: %w", err)
@@ -139,6 +162,7 @@ func NewGit(root string, paths chan string) (Walker, error) {
 		root:          root,
 		paths:         paths,
 		repo:          repo,
+		allFiles:      allFiles,
 		relPathOffset: len(root) + 1,
 	}, nil
 }

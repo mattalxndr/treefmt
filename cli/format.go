@@ -222,7 +222,7 @@ func (f *Format) walkFilesystem(ctx context.Context) func() error {
 		}
 
 		// create a filesystem walker
-		walker, err := walk.New(walkerType, f.TreeRoot, pathsCh)
+		walker, err := walk.New(walkerType, f.TreeRoot, f.GitAllFiles, pathsCh)
 		if err != nil {
 			return fmt.Errorf("failed to create walker: %w", err)
 		}
