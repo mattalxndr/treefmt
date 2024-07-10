@@ -6,7 +6,7 @@ import (
 	"github.com/gobwas/glob"
 
 	"git.numtide.com/numtide/treefmt/format"
-	"git.numtide.com/numtide/treefmt/walk"
+	"git.numtide.com/numtide/treefmt/walker"
 	"github.com/alecthomas/kong"
 	"github.com/charmbracelet/log"
 )
@@ -25,7 +25,7 @@ type Format struct {
 	Formatters            []string           `short:"f" help:"Specify formatters to apply. Defaults to all formatters."`
 	TreeRoot              string             `type:"existingdir" xor:"tree-root" help:"The root directory from which treefmt will start walking the filesystem (defaults to the directory containing the config file)."`
 	TreeRootFile          string             `type:"string" xor:"tree-root" help:"File to search for to find the project root (if --tree-root is not passed)."`
-	Walk                  walk.Type          `enum:"auto,git,filesystem" default:"auto" help:"The method used to traverse the files within --tree-root. Currently supports 'auto', 'git' or 'filesystem'."`
+	Walk                  walker.Type        `enum:"auto,git,filesystem" default:"auto" help:"The method used to traverse the files within --tree-root. Currently supports 'auto', 'git' or 'filesystem'."`
 	GitAllFiles           bool               `default:"false" help:"Forces the git walker to ignore change tracking and emit all files for processing instead of only those that have changed."`
 
 	Verbosity int  `name:"verbose" short:"v" type:"counter" default:"0" env:"LOG_LEVEL" help:"Set the verbosity of logs e.g. -vv."`
@@ -42,9 +42,9 @@ type Format struct {
 	formatters     map[string]*format.Formatter
 	globalExcludes []glob.Glob
 
-	filesCh     chan *walk.File
-	formattedCh chan *walk.File
-	processedCh chan *walk.File
+	filesCh     chan *walker.File
+	formattedCh chan *walker.File
+	processedCh chan *walker.File
 }
 
 func (f *Format) configureLogging() {
