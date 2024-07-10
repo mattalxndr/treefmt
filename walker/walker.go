@@ -56,12 +56,12 @@ type Walker interface {
 	Walk(ctx context.Context, fn WalkFunc) error
 }
 
-func New(walkerType Type, root string, gitAllFiles bool, pathsCh chan string) (Walker, error) {
+func New(walkerType Type, root string, noCache bool, pathsCh chan string) (Walker, error) {
 	switch walkerType {
 	case Git:
-		return NewGit(root, gitAllFiles, pathsCh)
+		return NewGit(root, noCache, pathsCh)
 	case Auto:
-		return Detect(root, gitAllFiles, pathsCh)
+		return Detect(root, noCache, pathsCh)
 	case Filesystem:
 		return NewFilesystem(root, pathsCh)
 	default:
@@ -69,9 +69,9 @@ func New(walkerType Type, root string, gitAllFiles bool, pathsCh chan string) (W
 	}
 }
 
-func Detect(root string, gitAllFiles bool, pathsCh chan string) (Walker, error) {
+func Detect(root string, noCache bool, pathsCh chan string) (Walker, error) {
 	// for now, we keep it simple and try git first, filesystem second
-	w, err := NewGit(root, gitAllFiles, pathsCh)
+	w, err := NewGit(root, noCache, pathsCh)
 	if err == nil {
 		return w, err
 	}
