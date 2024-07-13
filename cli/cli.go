@@ -41,6 +41,7 @@ type Format struct {
 	formatters     map[string]*format.Formatter
 	globalExcludes []glob.Glob
 
+	walker      walker.Walker
 	fileCh      chan *walker.File
 	formattedCh chan *walker.File
 	processedCh chan *walker.File

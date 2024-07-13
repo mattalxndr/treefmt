@@ -3,6 +3,8 @@ package walker
 import (
 	"context"
 	"fmt"
+	"git.numtide.com/numtide/treefmt/caching"
+	"git.numtide.com/numtide/treefmt/stats"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,6 +24,15 @@ type gitWalker struct {
 
 	noCache       bool
 	relPathOffset int
+}
+
+func (g gitWalker) UpdatePaths(batch []*File) error {
+	// nothing to do, git is doing all the tracking
+	return nil
+}
+
+func (g gitWalker) Close() error {
+	return nil
 }
 
 func (g gitWalker) Root() string {
@@ -98,6 +109,7 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 						Info:    info,
 					}
 
+					stats.Add(stats.Traversed, 1)
 					if err = fn(&file, err); err != nil {
 						return err
 					}
@@ -150,6 +162,7 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 				Info:    info,
 			}
 
+			stats.Add(stats.Traversed, 1)
 			return fn(&file, err)
 		})
 	}
@@ -159,13 +172,21 @@ func (g gitWalker) Walk(ctx context.Context, fn WalkFunc) error {
 
 func NewGit(
 	root string,
-	noCache bool,
+	cache caching.Cache,
 	paths chan string,
 ) (Walker, error) {
 	repo, err := git.PlainOpen(root)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repo: %w", err)
 	}
+
+	_, noCache := cache.(caching.NoOpCache)
+
+	// immediately close the cache as we have no need for it
+	if err = cache.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close cache: %w", err)
+	}
+
 	return &gitWalker{
 		root:          root,
 		paths:         paths,
